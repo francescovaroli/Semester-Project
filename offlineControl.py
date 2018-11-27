@@ -1,5 +1,6 @@
 import requests, json, datetime, time, csv
 import numpy as np
+import functools
 import io, copy
 import sys, logging
 from matplotlib import pyplot as plt
@@ -7,51 +8,28 @@ from scipy import optimize
 import matplotlib.cm as cm
 
 
-t0 = time.time()
 dkm = 40000.0 / 360.0
-dt = 10
+dt = 20
 url = 'http://129.132.63.205:8080/aircraft.json'
-path = '/home/francesco/PycharmProjects/SemesterProject/data/dataOUT.csv'
+path = '/home/francesco/PycharmProjects/SemesterProject/data/data20s_40m.csv'
 max_dist = 500
 
+def get_idx(pth):
+    ff = open(path, 'r')
+    n = np.genfromtxt(ff, delimiter=",", dtype=float, usecols=np.arange(1))
+    ff.close()
+    ids = [0]
+    c = 0
+    cont = 0
+    for i in n:
+        if c == i:
+            cont += 1
+        else:
+            ids.append(cont)
+            c += 1
+            cont += 1
+    return ids
 
-class Data:
-    def __init__(self, urld, file_path):
-        self.url = urld
-        self.file_path = file_path
-
-    def downlad(self):
-        n = 0
-        try:
-            new_data = json.loads(requests.get(self.url).content)['aircraft']
-            now = str(datetime.datetime.now())
-            fields = ['time', 'hex', 'flight', 'lat', 'lon', 'altitude', 'vert_rate',
-                      'track', 'speed', 'rssi', 'seen_pos']
-            with open(self.file_path, 'w') as writeFile:
-                writer = csv.DictWriter(writeFile, fieldnames=fields)
-                # writer.writeheader()
-                for line in new_data:
-                    if all(t in line for t in ('lat', 'lon', 'altitude')):
-                        n = n+1
-                        for l in ('nucp', 'squawk', 'category', 'mlat', 'tisb', 'messages', 'seen', 'type'):
-                            if l in line:
-                                del line[l]
-                        if 'flight' not in line:
-                            line['flight'] = 'unknown'
-                        if line['altitude'] == 'ground':
-                            line['altitude'] = 0
-                        # TODO: deal with missing speed & vert_rate (maybe in Plane)
-                        # if 'speed' not in line:    better use previous values if available
-                        #    line['speed'] = 0
-                        # if 'vert_rate' not in line:
-                        #    line['vert_rate'] = 0
-                        line['time'] = now
-                        writer.writerow(line)
-
-        except ImportError:
-            print("ERROR downloading data")
-
-        return n
 
 
 class Telescope:
@@ -83,8 +61,14 @@ class Telescope:
         a_idx = np.argmin(np.abs(pos[0]-a))
         return np.array([a_idx, e_idx])
 
+    def center_dist(self, pos, grid):
+        gazi = 47 + 4.5*grid[0]
+        gele = 15 + 4.5*grid[1]
+        d = np.array([gazi-pos[0], gele-pos[1]])
+        return np.linalg.norm(d)
+
     def observe(self):
-        self.sky[self.pos2grid([self.azi, self.ele])[0], self.pos2grid([self.azi, self.ele])[1]] += dt
+        self.sky[self.pos2grid([self.azi, self.ele])[0], self.pos2grid([self.azi, self.ele])[1]] += dt  # 6s to have an observation
 
     def mult_obs(self, x_f):
         g0 = self.pos2grid([T.azi, T.ele])
@@ -112,7 +96,7 @@ class Telescope:
             d = np.linalg.norm(np.array([x[0] - pl.azi, x[1] - pl.ele]))
             if d < 10:
                 p1 += 20*1/d                                               # TODO: tune parameters
-        if self.sky[i[0], i[1]] > 30 + (time.time()-t0)/100:
+        if self.sky[i[0], i[1]] > 60 + (dt*(s-1)) / 100:
             p1 += 0.1*self.sky[i[0], i[1]]
         p1 += np.linalg.norm(np.array(x[0]-self.azi, x[1]-self.ele))
         p2 = 0
@@ -120,7 +104,7 @@ class Telescope:
             d = np.linalg.norm(np.array([x[2] - plm.azi, x[3] - plm.ele]))
             if d < 10:
                 p2 += 10*1/d                                               # TODO: tune parameters
-        if self.sky[i[0], i[1]] > 30 + (time.time()-t0)/100:
+        if self.sky[i[0], i[1]] > 60 + (dt * (s - 1)) / 100:
             p2 += 0.1*sky_temp[im[0], im[1]]
         p2 += np.linalg.norm(np.array(x[2]-x[0], x[3]-x[1]))
         return p1 + 0.5*p2
@@ -128,15 +112,13 @@ class Telescope:
     def mpc(self):
         o = []
         v = []
-        dx = self.max_speed * dt - 0.1
+        dx = self.max_speed*dt-0.1
         dx0 = [[0, 0, 0, 0], [dx, 0, 0, 0], [-dx, 0, 0, 0], [0, dx, 0, 0], [0, -dx, 0, 0]]
         for d in dx0:
-            x0 = np.array([self.azi, self.ele, self.azi, self.ele]) + d
+            x0 = np.array([self.azi, self.ele, self.azi, self.ele])+d
             bnds = ((45, 314), (13, 81), (45, 314), (13, 81))
-            cons = ({'type': 'ineq',
-                     'fun': lambda x: self.max_speed * dt - np.linalg.norm(np.array([T.azi - x[0], T.ele - x[1]]))},
-                    {'type': 'ineq',
-                     'fun': lambda x: self.max_speed * dt - np.linalg.norm(np.array([x[0] - x[2], x[1] - x[3]]))})
+            cons = ({'type': 'ineq', 'fun': lambda x: self.max_speed*dt-np.linalg.norm(np.array([T.azi-x[0], T.ele-x[1]]))},
+                    {'type': 'ineq', 'fun': lambda x: self.max_speed*dt-np.linalg.norm(np.array([x[0]-x[2], x[1]-x[3]]))})
             v.append(optimize.minimize(self.cost_fct, x0, constraints=cons, bounds=bnds).fun)
             o.append(optimize.minimize(self.cost_fct, x0, constraints=cons, bounds=bnds).x)
         b = np.nanargmin(v)
@@ -149,6 +131,24 @@ class Telescope:
         logging.info("azi " + a)
         logging.info("ele " + e)
         # TODO: write output with new azi, ele to move the real telescope
+
+    def show_obs_rel(self,):
+        o = plt.gca()
+        a = np.size(T.sky, 0)
+        e = np.size(T.sky, 1)
+        o.set_xlim(0, 360)
+        o.set_ylim(0, 90)
+        o.set_xlabel('Azimut')
+        o.set_ylabel('Elevation')
+        o.set_title('Observations')
+        r = 3.25
+        for ia in range(0, a):
+            for ie in range(0, e):
+                c = cm.YlOrBr(self.sky[ia, ie]/(dt*10))
+                pos = self.grid2pos([ia, ie])
+                circle = plt.Circle(xy=(pos[0], pos[1]), radius=r, color=c)
+                o.add_artist(circle)
+        return o
 
     def show_obs(self):
         o = plt.gca()
@@ -172,6 +172,9 @@ class Telescope:
         return o
 
 
+
+
+
 class Plane:
 
     def __init__(self, path, i):
@@ -180,9 +183,10 @@ class Plane:
         strings = np.genfromtxt(ff, delimiter=",", dtype=str)
         ff.close()
         ff = open(path, 'r')
-        numbers = np.genfromtxt(ff, delimiter=",", dtype=float, usecols=np.arange(3, 11))
+        numbers = np.genfromtxt(ff, delimiter=",", dtype=float, usecols=np.arange(4, 12))
         ff.close()
-        self.hex = strings[i][1]
+        self.id = int(strings[i][0])
+        self.hex = strings[i][2]
         self.lat = numbers[i, 0]
         self.long = numbers[i, 1]
         self.alt = numbers[i, 2]/3.2808/1000.0
@@ -199,6 +203,7 @@ class Plane:
         self.last_seen = numbers[i, 7]
         self.mod = 0
         self.model_fo(self.last_seen)
+
 
     def model_fo(self, t):  # modelling with constant acceleration ---> effective only whe we have already seen the plane
         dv = self.speed - self.prev_speed
@@ -222,6 +227,13 @@ def plot_error():
     nf = len(planes)
     a3 = fig.add_subplot(111)
     colors = ['r', 'b', 'g', 'c', 'k', 'y', 'm', 'w']
+    a3.set_xlim(0, 360)
+    a3.set_ylim(0, 90)
+    a3.set_title('Real time model')
+    a3.set_xlabel("Azimut [deg]")
+    a3.set_ylabel("Elevation [deg]")
+    a3.legend(['Beam radius', 'Telescope', 'Previous position', 'Modeled position', 'Actual position'])
+    a3.grid()
     for i in range(1, 5):
         colors += colors
     a3.scatter(T.azi, T.ele, marker='^', s=60)
@@ -232,28 +244,23 @@ def plot_error():
         for h in range(0, nf):
             if planes_temp[i].hex == planes[h].hex:
                 a3.scatter(planes[h].azi, planes[h].ele, color=colors[i], marker='o', s=15)
-    a3.set_xlim(0, 360)
-    a3.set_ylim(0, 90)
-    a3.set_title('Real time model')
-    a3.set_xlabel("Azimut [deg]")
-    a3.set_ylabel("Elevation [deg]")
-    a3.legend(['Beam radius', 'Telescope', 'Previous position', 'Modeled position', 'Actual position'])
-    a3.grid()
     return a3
 
 
-T = Telescope(120, 13.1)  # position initialized
-data = Data(url, path)
+T = Telescope(290, 19.5)  # position initialized
 first = 1
-fig = plt.figure(figsize=(20, 5))
+fig, (a,o) = plt.subplots(1,2, figsize=[20, 5], sharey='all')
 theta = np.arange(0, 2 * np.pi + np.pi / 50, np.pi / 50)
 x = 3.250 * np.array([np.cos(q) for q in theta])
 y = 3.250 * np.array([np.sin(q) for q in theta])
-t0 = time.time()
-while True:
-    print(time.time()-t0)
-    n_pl = data.downlad()                                    # planes=new real  planes_mod=new modeled  planes_temp=old
-    planes = [Plane(path, i) for i in range(0, n_pl)]
+
+idx = get_idx(path)
+s = 0
+
+while True:                               # planes=new real  planes_mod=new modeled  planes_temp=old
+    planes = [Plane(path, i) for i in range(idx[s], idx[s+1])]
+    s += 1
+    n_pl = len(planes)
     if first != 1:
         fig.clear()
         plt.ion()
@@ -292,8 +299,8 @@ while True:
         dist.append(np.linalg.norm(np.array([T.azi - pl.azi, T.ele - pl.ele])))
     m = min(dist)
     ind = np.nanargmin(dist)
-    if mov < 0.1:
-        print('\nNo movement needed, closest plane at:', str('%.2f' % m),
+    if mov < 0.2:
+        print('\nNo movement needed, closest plane at:', str('%.2f' % min(dist)),
               'degrees,  in: [', str('%.3f' % planes[ind].azi), ',', str('%.3f' % planes[ind].ele), ']')
     else:
         print('\nMoving from:', [T.azi, T.ele], 'to:', x_opt[0:2])
@@ -314,7 +321,8 @@ while True:
         T.move(x_opt)
     else:
         T.observe()
-    #T.show_obs()
-
-    time.sleep(dt)
-
+#   fig_obs.clear()
+#    plt.ion()
+#    o = T.show_obs(grid2)
+#    plt.pause(0.1)
+#    fig.canvas.draw()
