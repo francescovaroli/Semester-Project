@@ -82,7 +82,6 @@ class Data:
                       'track', 'speed', 'rssi', 'seen_pos']
             with open(self.file_path, 'w') as writeFile:
                 writer = csv.DictWriter(writeFile, fieldnames=fields)
-                # writer.writeheader()
                 for line in new_data:
                     if all(t in line for t in ('lat', 'lon', 'altitude')):
                         n = n+1
@@ -93,11 +92,6 @@ class Data:
                             line['flight'] = 'unknown'
                         if line['altitude'] == 'ground':
                             line['altitude'] = 0
-                        # TODO: deal with missing speed & vert_rate (maybe in Plane)
-                        # if 'speed' not in line:    better use previous values if available
-                        #    line['speed'] = 0
-                        # if 'vert_rate' not in line:
-                        #    line['vert_rate'] = 0
                         line['time'] = now
                         writer.writerow(line)
 
@@ -129,7 +123,7 @@ class Telescope:
         dp = p - np.array((self.x, self.y, self.alt))
         dp = dp.reshape((3, 1))
         theta1 = self.azi*np.pi/180
-        theta2 = (90-self.ele)*np.pi/180  # may be wrong the elevation angle,
+        theta2 = (90-self.ele)*np.pi/180 
         c1, s1 = np.cos(theta1), np.sin(theta1)
         c2, s2 = np.cos(theta2), np.sin(theta2)
         r1 = np.matrix([[c1, -s1, 0], [s1, c1, 0], [0, 0, 1]])
