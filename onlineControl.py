@@ -10,7 +10,7 @@ import matplotlib.cm as cm
 t0 = time.time()
 dkm = 40000.0 / 360.0
 dt = 10
-url = 'http://129.132.63.205:8080/aircraft.json'
+url = 'http://####:8080/aircraft.json'
 path = '/home/francesco/PycharmProjects/SemesterProject/data/dataOUT.csv'
 max_dist = 500
 
