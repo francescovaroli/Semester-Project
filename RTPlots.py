@@ -7,7 +7,7 @@ import json, requests, datetime, csv
 
 dkm = 40000.0 / 360.0  # 111.1 km/degree
 path = '/home/francesco/PycharmProjects/SemesterProject/data/dataOUT.csv'
-url = 'http://129.132.63.205:8080/aircraft.json'
+url = 'http://####.json'
 
 class Plots:
 
