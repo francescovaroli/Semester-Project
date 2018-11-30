@@ -3,7 +3,7 @@ import numpy as np
 import logging
 
 dkm = 40000.0 / 360.0
-url = 'http://129.132.63.205:8080/aircraft.json'
+url = 'http://####:8080/aircraft.json'
 path = '/home/francesco/PycharmProjects/SemesterProject/data/data20s_20m.csv'
 
 
