@@ -10,7 +10,6 @@ import matplotlib.cm as cm
 
 dkm = 40000.0 / 360.0
 dt = 20
-url = 'http://129.132.63.205:8080/aircraft.json'
 path = '/home/francesco/PycharmProjects/SemesterProject/data/data20s_40m.csv'
 max_dist = 500
 
