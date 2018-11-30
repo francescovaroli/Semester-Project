@@ -1,13 +1,6 @@
 import requests, json, datetime, time, csv
 import numpy as np
-from matplotlib import pyplot as plt
-import matplotlib.animation as animation
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.projections.polar import PolarAxes
-import matplotlib as mpl
-import functools
-import io
-import sys
+import logging
 
 dkm = 40000.0 / 360.0
 url = 'http://129.132.63.205:8080/aircraft.json'
@@ -91,19 +84,17 @@ class Telescope:
         r2 = np.matrix([[c2, 0, s2], [0, 1, 0], [-s2, 0, c2]])
         tr = r1*r2
         return tr.transpose()*dp
-
-
-    def D2T_coord(self, P):
-        m = np.array([])
-        for p in P:
-            m = np.append(m, self.to_T_coord(p))
-        return m.reshape((-1, 3))
+    
+    def switchOff(self):
+        logging.basicConfig(filename="ctrl_output.log", level=logging.INFO, format="%(asctime)-15s  %(message)s")
+        logging.info('OFF  ', time.ctime())
 
     def check_aircraft(self, p):
         p_t = self.to_t_coord(p.pos)
         dist_xy = np.sqrt(p_t[0]**2 + p_t[1]**2)
         return dist_xy > (np.sin(self.beam))*p_t[2]
 
+    
 class Plane:
 
     def __init__(self, path, i):
@@ -130,7 +121,7 @@ class Plane:
         self.azi = 180.0 + np.arctan2((self.pos[0]-47.33982*dkm), (self.pos[1])-8.111203*dkm)/np.pi*180.0
 
 
-T = Telescope(150, 13.5)  # position initialized
+T = Telescope(150, 13.5)  
 data = Data(url, path)
 
 while True:
@@ -143,6 +134,7 @@ while True:
             print('\nplane coordinates:\n', plane.pos)
             print('\ncoordinates in telescope frame:\n', T.to_t_coord(plane.pos))
             r=0
+            T.switchOff()
     if r:
         print('No plane in the beam  ', time.ctime())
     time.sleep(2)
