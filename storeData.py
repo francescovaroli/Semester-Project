@@ -1,7 +1,7 @@
 import requests, json, datetime, time, csv
 
 dt =20
-url = 'http://129.132.63.205:8080/aircraft.json'
+url = 'http://####:8080/aircraft.json'
 path = '/home/francesco/PycharmProjects/SemesterProject/data/data20s_60m.csv'
 
 
